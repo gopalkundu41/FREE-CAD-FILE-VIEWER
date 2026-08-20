@@ -1,0 +1,2098 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAD Viewer — GLB / STL / STEP</title>
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#f3f6f9;color:#26364b;font-family:Segoe UI,Arial,sans-serif}
+#viewer{position:fixed;inset:0;background:#f5f6f7}
+#viewer canvas{display:block}
+
+#topBar{
+ position:fixed;left:8px;right:8px;top:5px;height:62px;z-index:30;
+ display:flex;align-items:center;gap:20px;padding:0 20px;
+ background:#fff;border:1px solid #d9e0e8;border-radius:8px;
+ box-shadow:0 2px 8px rgba(0,0,0,.08)
+}
+.brand{font-size:22px;font-weight:600;color:#1d2c40;white-space:nowrap}
+.cube{color:#0879d1;font-size:25px;margin-right:8px}
+#fileTab{
+ padding:9px 14px;border:1px solid #dce3eb;border-radius:7px;
+ background:#f7f9fb;color:#526276;font-size:13px;max-width:430px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+
+#dropZone{
+ position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+ background:#0879d11a;z-index:50;pointer-events:none
+}
+#dropZone div{
+ padding:30px 46px;border:2px dashed #0879d1;border-radius:14px;
+ background:#fff;color:#26364b;font-size:18px;text-align:center
+}
+
+#panel{
+ position:fixed;left:8px;top:76px;bottom:12px;width:310px;z-index:20;
+ padding:0;background:#fff;border:1px solid #d8e0e8;border-radius:7px;
+ box-shadow:0 2px 9px rgba(0,0,0,.08);overflow:hidden;
+ transition:width .2s ease
+}
+#panel.minimized{width:42px}
+#panel.minimized .panelContent{display:none}
+
+#panelMinBtn{
+ position:absolute;right:7px;top:7px;z-index:4;width:26px!important;height:26px!important;
+ padding:0!important;margin:0!important;border:1px solid #d6dee7!important;
+ border-radius:5px!important;background:#fff!important;color:#506176!important
+}
+.panelTabs{height:45px;display:flex;border-bottom:1px solid #e5e9ee}
+.panelTabs button{
+ flex:1;width:auto!important;margin:0!important;padding:0!important;
+ border:0!important;border-radius:0!important;background:#fff!important;
+ color:#5c6b7c!important;font-size:12px!important;
+ border-bottom:2px solid transparent!important
+}
+.panelTabs button.active{color:#0879d1!important;border-bottom-color:#0879d1!important;font-weight:600}
+.panelContent{position:relative;height:100%;padding:13px 12px;overflow:hidden}
+#panelTitle{font-size:20px;font-weight:600;margin-bottom:2px}
+#panelSubtitle{font-size:11px;color:#8b97a6;line-height:1.35;margin-bottom:10px}
+#fileName{font-size:11px;color:#a0aaba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px}
+
+#componentHeader{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin:12px 0 8px}
+#filter{
+ width:100%;padding:8px 9px;border:1px solid #d8e0e8;border-radius:6px;
+ font-size:12px;outline:none
+}
+#parts{
+ height:calc(100% - 128px);overflow:auto;margin-top:7px;
+ border:1px solid #d8e0e8;border-radius:6px;background:#fff;
+ position:relative;z-index:2
+}
+.part{
+ font-size:12px;padding:7px 9px;border-bottom:1px solid #edf0f3;cursor:pointer;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#2b3b50
+}
+.part:hover{background:#f2f7fb}
+.part.active{background:#dceefe;color:#125c92}
+
+#status{
+ position:absolute;left:12px;right:12px;bottom:12px;
+ height:42px;overflow:hidden;padding:6px 0;
+ font-size:10px;color:#8793a2;line-height:1.35;
+ background:#fff;z-index:1
+}
+.notice{display:none}
+
+/* Keep original functional controls in the DOM but off-screen. */
+#open,#reset,#fit,#edges,#play,#slider,#pct{position:absolute;left:-10000px;opacity:0;pointer-events:none}
+#fileInput{display:none}
+
+#commandBar{
+ position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:25;
+ display:flex;align-items:center;gap:2px;padding:7px 9px;
+ background:#fff;border:1px solid #dce3ea;border-radius:8px;
+ box-shadow:0 3px 14px rgba(0,0,0,.12)
+}
+.commandBtn{
+ width:auto!important;min-width:61px!important;height:52px!important;
+ margin:0!important;padding:4px 7px!important;border:0!important;
+ border-radius:5px!important;background:#fff!important;color:#314258!important;
+ text-align:center
+}
+.commandBtn:hover{background:#f1f6fb!important}
+.commandBtn .ico{display:block;height:23px;font-size:18px;line-height:22px;color:#0879d1}
+.commandBtn span:last-child{font-size:10px}
+#openCommand{border-left:1px solid #e4e9ee!important;min-width:70px!important;font-weight:600}
+
+.commandBtn.active{background:#e8f3fc!important;color:#0879d1!important}
+
+#explodePanel{
+ position:fixed;left:50%;bottom:86px;transform:translateX(-50%);
+ display:none;flex-direction:column;gap:9px;
+ width:300px;padding:10px 14px 12px;z-index:26;
+ background:#fff;border:1px solid #dce3ea;border-radius:8px;
+ box-shadow:0 3px 14px rgba(0,0,0,.12);
+}
+#explodePanel.open{display:flex}
+#explodePanelHead{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:#334257}
+#exportPanelHead{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:#334257}
+#explodePanelHead button,#exportPanelHead button{
+ width:22px!important;height:22px!important;min-width:0!important;padding:0!important;
+ border:0!important;background:transparent!important;color:#8b97a6!important;
+ font-size:12px;cursor:pointer
+}
+#explodePanelHead button:hover{color:#26364b!important}
+#explodePanelBody{display:flex;align-items:center;gap:10px}
+#explodeAutoBtn{
+ width:30px!important;height:30px!important;min-width:0!important;padding:0!important;
+ border:1px solid #d8e0e8!important;border-radius:6px!important;background:#f7f9fb!important;
+ color:#0879d1!important;font-size:12px;cursor:pointer;flex:none
+}
+#explodeAutoBtn:hover{background:#eaf3fb!important}
+#explodeAutoBtn.playing{background:#0879d1!important;color:#fff!important;border-color:#0879d1!important}
+#explodeRange{flex:1}
+#explodePctLabel{font-size:11px;color:#526276;width:34px;text-align:right;flex:none}
+
+#exportPanel{
+ position:fixed;left:50%;bottom:86px;transform:translateX(-50%);
+ display:none;flex-direction:column;gap:8px;
+ width:290px;padding:10px 14px 12px;z-index:26;
+ background:#fff;border:1px solid #dce3ea;border-radius:8px;
+ box-shadow:0 3px 14px rgba(0,0,0,.12);
+}
+#exportPanel.open{display:flex}
+.exportChoice{
+ width:100%!important;text-align:left!important;padding:9px 11px!important;
+ border:1px solid #d8e0e8!important;border-radius:6px!important;background:#f7f9fb!important;
+ color:#334257!important;font-size:12px!important;cursor:pointer
+}
+.exportChoice:hover{background:#eaf3fb!important;border-color:#0879d1!important;color:#0879d1!important}
+.exportChoice:disabled{opacity:.5;cursor:not-allowed}
+.exportChoice:disabled:hover{background:#f7f9fb!important;border-color:#d8e0e8!important;color:#334257!important}
+
+#exportDracoRow{
+ display:flex;align-items:center;gap:8px;
+ font-size:12px;color:#334257;cursor:pointer;user-select:none;
+ padding:2px 1px;
+}
+#exportDracoRow input{margin:0;width:14px;height:14px;flex:none}
+
+.exportDracoRow{
+ display:flex;align-items:center;gap:8px;
+ font-size:12px;color:#334257;cursor:pointer;user-select:none;
+ padding:2px 1px;
+}
+.exportDracoRow input{margin:0;width:14px;height:14px;flex:none}
+
+#displayPanel{
+ position:fixed;left:50%;bottom:86px;transform:translateX(-50%);
+ display:none;flex-direction:column;gap:9px;
+ width:290px;padding:10px 14px 12px;z-index:26;
+ background:#fff;border:1px solid #dce3ea;border-radius:8px;
+ box-shadow:0 3px 14px rgba(0,0,0,.12);
+}
+#displayPanel.open{display:flex}
+#displayPanelHead{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:#334257}
+#displayPanelHead button{
+ width:22px!important;height:22px!important;min-width:0!important;padding:0!important;
+ border:0!important;background:transparent!important;color:#8b97a6!important;
+ font-size:12px;cursor:pointer
+}
+#displayPanelHead button:hover{color:#26364b!important}
+
+#viewCube{
+ position:fixed;right:28px;top:84px;z-index:18;width:104px;height:104px;
+ perspective:420px;
+}
+#cube3d{
+ position:relative;width:100%;height:100%;
+ transform-style:preserve-3d;
+ transform:rotateX(-20deg) rotateY(-30deg);
+ cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;
+}
+#cube3d.dragging{cursor:grabbing}
+#viewCube .cf{
+ position:absolute;width:72px;height:72px;left:16px;top:16px;
+ background:linear-gradient(160deg,#ffffff,#eef2f6);
+ border:1px solid #b8c3cf;color:#4c5b6d;
+ font-size:10px;font-weight:600;letter-spacing:.3px;
+ display:flex;align-items:center;justify-content:center;
+ backface-visibility:hidden;
+ box-shadow:inset 0 0 0 1px rgba(255,255,255,.5);
+}
+#viewCube .cf:hover{background:#e8f3fc;color:#0879d1;border-color:#0879d1}
+#viewCube .cf.front {transform:translateZ(36px)}
+#viewCube .cf.back  {transform:rotateY(180deg) translateZ(36px)}
+#viewCube .cf.right {transform:rotateY(90deg) translateZ(36px)}
+#viewCube .cf.left  {transform:rotateY(-90deg) translateZ(36px)}
+#viewCube .cf.top   {transform:rotateX(90deg) translateZ(36px)}
+#viewCube .cf.bottom{transform:rotateX(-90deg) translateZ(36px)}
+#axis{position:fixed;right:34px;bottom:112px;z-index:18;font-size:11px;color:#69788a;text-align:center}
+
+#hint{
+ position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:24;
+ background:#fff;border:1px solid #dce3ea;border-radius:6px;padding:6px 9px;
+ font-size:10px;color:#7a8797;max-width:360px;text-align:center;
+ transition:opacity .15s ease;
+}
+#hint.hidden{display:none}
+#modeToast{
+ position:fixed;left:50%;top:82px;transform:translateX(-50%);
+ z-index:40;display:none;padding:7px 12px;border-radius:6px;
+ background:#fff;border:1px solid #d9e1e9;box-shadow:0 2px 8px rgba(0,0,0,.1);
+ font-size:11px;color:#3d4d62
+}
+
+#loadOverlay{
+ position:fixed;inset:0;z-index:60;
+ display:flex;align-items:center;justify-content:center;
+ background:rgba(17,20,24,.45);
+ opacity:0;pointer-events:none;
+ transition:opacity .18s ease;
+}
+#loadOverlay.active{opacity:1;pointer-events:auto}
+#loadCard{
+ background:#fff;border-radius:12px;padding:26px 36px 22px;
+ box-shadow:0 10px 34px rgba(0,0,0,.28);
+ display:flex;flex-direction:column;align-items:center;gap:8px;
+ min-width:200px;
+}
+#loadSpinnerWrap{position:relative;width:84px;height:84px}
+#loadRing{width:84px;height:84px;transform:rotate(-90deg)}
+#loadRing .ring-track{fill:none;stroke:#e3e8ee;stroke-width:6}
+#loadRing .ring-fill{
+ fill:none;stroke:#0879d1;stroke-width:6;stroke-linecap:round;
+ stroke-dasharray:175.93;stroke-dashoffset:175.93;
+ transition:stroke-dashoffset .15s ease;
+}
+#loadRing.indeterminate{animation:loadSpin 1s linear infinite}
+#loadRing.indeterminate .ring-fill{stroke-dasharray:110 175.93;stroke-dashoffset:0;transition:none}
+@keyframes loadSpin{to{transform:rotate(270deg)}}
+#loadPctText{
+ position:absolute;inset:0;
+ display:flex;align-items:center;justify-content:center;
+ font-size:15px;font-weight:700;color:#26364b;
+}
+#loadRing.indeterminate ~ #loadPctText{opacity:0}
+#loadLabel{font-size:13px;font-weight:600;color:#334257;text-align:center;max-width:230px}
+#loadFileNameText{font-size:11px;color:#8793a2;text-align:center;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:850px){
+ #panel{width:280px}
+ #commandBar{left:auto;right:10px;transform:none;max-width:calc(100vw - 20px);overflow:auto}
+}
+</style>
+
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js",
+    "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+
+<body>
+<div id="topBar">
+  <div class="brand"><span class="cube">◇</span>CAD Viewer</div>
+  <div id="fileTab">No file loaded</div>
+</div>
+
+<div id="viewer"></div>
+
+<div id="dropZone">
+  <div>Drop a CAD file here<br><small style="color:#7b8796">GLB, GLTF, STL, STEP, STP, IGES, IGS, BREP or BRP</small></div>
+</div>
+
+<div id="hint">Open a file, then click a component in the tree or directly on the 3D model.</div>
+<div id="modeToast"></div>
+
+<div id="loadOverlay">
+  <div id="loadCard">
+    <div id="loadSpinnerWrap">
+      <svg id="loadRing" viewBox="0 0 64 64">
+        <circle class="ring-track" cx="32" cy="32" r="28"></circle>
+        <circle class="ring-fill" cx="32" cy="32" r="28"></circle>
+      </svg>
+      <div id="loadPctText">0%</div>
+    </div>
+    <div id="loadLabel">Reading file…</div>
+    <div id="loadFileNameText"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <button id="panelMinBtn" title="Minimize panel">‹</button>
+  <div class="panelContent">
+    <div id="panelTitle">CAD Viewer</div>
+    <div id="panelSubtitle">Free browser-based viewer — files stay on your computer.</div>
+
+    <input id="fileInput" type="file" accept=".glb,.gltf,.stl,.step,.stp,.iges,.igs,.brep,.brp">
+    <button id="open" class="primary">Open</button>
+    <div id="fileName">No file loaded</div>
+
+    <input id="slider" type="range" min="0" max="100" value="0">
+    <span id="pct">0%</span>
+    <button id="play">Explode</button>
+    <button id="reset">Reset All</button>
+    <button id="fit">Fit Model</button>
+    <button id="edges">Edges</button>
+
+    <div id="componentHeader"><span>Components</span><span id="count">—</span></div>
+    <input id="filter" type="text" placeholder="⌕  Filter by name">
+    <div id="parts"></div>
+
+    <div id="status">Choose a GLB, GLTF, STL or STEP file to begin.</div>
+  </div>
+</div>
+
+<div id="viewCube" aria-label="View cube — drag to orbit, click a face to snap">
+  <div id="cube3d">
+    <div class="cf top"    data-view="top">TOP</div>
+    <div class="cf bottom" data-view="bottom">BOTTOM</div>
+    <div class="cf front"  data-view="front">FRONT</div>
+    <div class="cf back"   data-view="back">BACK</div>
+    <div class="cf left"   data-view="left">LEFT</div>
+    <div class="cf right"  data-view="right">RIGHT</div>
+  </div>
+</div>
+<div id="axis">Y ↑<br><span style="color:#176fd0">Z</span> ─ <span style="color:#d83c3c">X</span></div>
+
+<div id="explodePanel">
+  <div id="explodePanelHead">
+    <span>Explode View</span>
+    <button id="explodePanelClose" aria-label="Close">✕</button>
+  </div>
+  <div id="explodePanelBody">
+    <button id="explodeAutoBtn" title="Auto-animate explode">▶</button>
+    <input id="explodeRange" type="range" min="0" max="100" value="0">
+    <span id="explodePctLabel">0%</span>
+  </div>
+</div>
+
+<div id="displayPanel">
+  <div id="displayPanelHead">
+    <span>Display</span>
+    <button id="displayPanelClose" aria-label="Close">✕</button>
+  </div>
+  <label class="exportDracoRow" id="edgesToggleRow">
+    <input type="checkbox" id="edgesToggle">
+    <span>Show edges</span>
+  </label>
+  <label class="exportDracoRow" id="shadowsToggleRow">
+    <input type="checkbox" id="shadowsToggle">
+    <span>Cast shadows (auto-disabled on heavy models for speed)</span>
+  </label>
+</div>
+
+<div id="exportPanel">
+  <div id="exportPanelHead">
+    <span>Export Model</span>
+    <button id="exportPanelClose" aria-label="Close">✕</button>
+  </div>
+  <label id="exportDracoRow">
+    <input type="checkbox" id="exportDracoToggle">
+    <span>Compress geometry with Draco (smaller file)</span>
+  </label>
+  <button id="exportGlbBtn" class="exportChoice">Export as .glb (binary — recommended)</button>
+  <button id="exportGltfBtn" class="exportChoice">Export as .gltf (JSON + embedded data)</button>
+  <button id="exportStlBtn" class="exportChoice">Export as .stl (geometry only — for 3D printing)</button>
+  <button id="exportPngBtn" class="exportChoice">Save current view as .png image</button>
+</div>
+
+<div id="commandBar">
+  <button class="commandBtn" id="homeCommand" title="Reset to home view"><span class="ico">⌂</span><span>Home</span></button>
+  <button class="commandBtn" id="openCommand"><span class="ico">📂</span><span>Open</span></button>
+  <button class="commandBtn" id="fitCommand"><span class="ico">□</span><span>Fit All</span></button>
+  <button class="commandBtn" id="explodeCommand"><span class="ico">◈</span><span>Explode</span></button>
+  <button class="commandBtn" id="exportCommand"><span class="ico">⬇</span><span>Export</span></button>
+  <button class="commandBtn" id="displayCommand"><span class="ico">◑</span><span>Display</span></button>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "three/addons/controls/OrbitControls.js";
+import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
+import {DRACOLoader} from "three/addons/loaders/DRACOLoader.js";
+import {STLLoader} from "three/addons/loaders/STLLoader.js";
+import {GLTFExporter} from "three/addons/exporters/GLTFExporter.js";
+import {STLExporter} from "three/addons/exporters/STLExporter.js";
+import {EffectComposer} from "three/addons/postprocessing/EffectComposer.js";
+import {RenderPass} from "three/addons/postprocessing/RenderPass.js";
+import {GTAOPass} from "three/addons/postprocessing/GTAOPass.js";
+import {OutputPass} from "three/addons/postprocessing/OutputPass.js";
+import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
+
+/* OpenCascade STEP importer.
+   Open-source browser/WASM importer. */
+const OCCT_SCRIPT =
+  "https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js";
+
+const $=x=>document.getElementById(x);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xf5f6f7);
+
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,.001,100000);
+camera.position.set(3,2.4,4);
+
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance",preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.info.autoReset=true;
+$("viewer").appendChild(renderer.domElement);
+
+// Soft, neutral studio-style image-based lighting so PBR materials show
+// realistic reflections/highlights instead of flat matte shading. This only
+// affects lighting (scene.environment) — the visible flat gray backdrop
+// (scene.background) is untouched.
+const pmremGenerator=new THREE.PMREMGenerator(renderer);
+scene.environment=pmremGenerator.fromScene(new RoomEnvironment(),0.04).texture;
+pmremGenerator.dispose();
+
+// Ambient occlusion adds soft contact shadows where surfaces meet (e.g. a
+// cushion pressing into a sofa frame) — the detail that separates a
+// "photoreal" render from flat CG shading that plain directional+ambient
+// lighting alone can't produce.
+const composer=new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene,camera));
+const gtaoPass=new GTAOPass(scene,camera,innerWidth,innerHeight);
+gtaoPass.output=GTAOPass.OUTPUT.Default;
+composer.addPass(gtaoPass);
+composer.addPass(new OutputPass());
+
+const controls=new OrbitControls(camera,renderer.domElement);
+window.__cadControls=controls;
+controls.enableDamping=true;
+controls.dampingFactor=.12;
+controls.rotateSpeed=.55;
+controls.zoomSpeed=.9;
+controls.panSpeed=.6;
+controls.autoRotate=false;
+controls.autoRotateSpeed=0;
+controls.enableKeys=false;
+
+// Render on-demand instead of every frame: much lighter when the view is idle.
+let needsRender=true;
+function requestRender(){needsRender=true;}
+controls.addEventListener("change",requestRender);
+window.__cadRequestRender=requestRender;
+window.__cadIsPlaying=()=>playing;
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x666666,.85));
+const key=new THREE.DirectionalLight(0xffffff,1.15);
+key.position.set(4,6,8);
+key.castShadow=true;
+key.shadow.mapSize.set(1024,1024);
+key.shadow.bias=-0.0003;
+scene.add(key);
+scene.add(key.target);
+
+// Invisible except where the model casts a shadow onto it — a light
+// "contact shadow" floor without drawing an actual visible ground plane.
+const shadowGround=new THREE.Mesh(
+  new THREE.PlaneGeometry(1,1),
+  new THREE.ShadowMaterial({opacity:.28})
+);
+shadowGround.rotation.x=-Math.PI/2;
+shadowGround.receiveShadow=true;
+shadowGround.visible=false;
+scene.add(shadowGround);
+
+let shadowsEnabled=true;
+
+function setShadowsEnabled(on){
+  shadowsEnabled=on;
+  key.castShadow=on;
+  shadowGround.visible=on&&!!root&&!getBox(root).isEmpty();
+  requestRender();
+}
+window.__cadSetShadows=setShadowsEnabled;
+window.__cadShadowsOn=()=>shadowsEnabled;
+
+// Shadow casting roughly doubles draw calls (a full depth pre-pass per
+// light) — cheap for a single part, costly for a 400-component assembly.
+// Auto-disable it for heavy models so the first load stays responsive;
+// the Display panel lets the user force it back on if they want it anyway.
+const HEAVY_TRIANGLE_LIMIT=250000;
+const HEAVY_MESH_LIMIT=150;
+
+function autoTuneShadowsForModel(){
+  let triCount=0;
+  meshes.forEach(m=>{
+    const geom=m.geometry;
+    if(!geom)return;
+    if(geom.index)triCount+=geom.index.count/3;
+    else if(geom.attributes.position)triCount+=geom.attributes.position.count/3;
+  });
+
+  const heavy=triCount>HEAVY_TRIANGLE_LIMIT||meshes.length>HEAVY_MESH_LIMIT;
+  setShadowsEnabled(!heavy);
+  return {heavy,triCount:Math.round(triCount)};
+}
+
+function updateShadowRig(){
+  if(!root){
+    shadowGround.visible=false;
+    return;
+  }
+
+  const box=getBox(root);
+  if(box.isEmpty()){
+    shadowGround.visible=false;
+    return;
+  }
+
+  const size=box.getSize(new THREE.Vector3());
+  const center=box.getCenter(new THREE.Vector3());
+  const radius=Math.max(size.x,size.y,size.z)||1;
+
+  shadowGround.visible=shadowsEnabled;
+  shadowGround.scale.setScalar(radius*6);
+  shadowGround.position.set(center.x,box.min.y-radius*0.001,center.z);
+
+  key.position.set(center.x+radius*1.1,center.y+radius*1.8,center.z+radius*1.4);
+  key.target.position.copy(center);
+  key.target.updateMatrixWorld();
+
+  const cam=key.shadow.camera;
+  cam.left=-radius*1.3;
+  cam.right=radius*1.3;
+  cam.top=radius*1.3;
+  cam.bottom=-radius*1.3;
+  cam.near=radius*0.05;
+  cam.far=radius*6;
+  cam.updateProjectionMatrix();
+
+  key.shadow.normalBias=radius*0.01;
+
+  requestRender();
+}
+
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+
+let root=null;
+let meshes=[];
+let originals=[];
+let modelSize=1;
+let playing=false;
+let edges=false;                 // edge overlays are expensive; off by default, built lazily
+let edgesBuilt=false;
+let selectedIndex=-1;
+let currentFileType="";
+const originalMaterials=new Map();
+
+function getBox(obj){
+  obj.updateWorldMatrix(true,true);
+  return new THREE.Box3().setFromObject(obj);
+}
+
+function frameObject(obj,padding=3){
+  const box=getBox(obj);
+  if(box.isEmpty())return;
+
+  const center=box.getCenter(new THREE.Vector3());
+  const size=box.getSize(new THREE.Vector3());
+  const radius=Math.max(size.x,size.y,size.z)*.5||.01;
+  const distance=radius/Math.tan(THREE.MathUtils.degToRad(camera.fov*.5))*padding;
+
+  let dir=camera.position.clone().sub(controls.target);
+  if(dir.lengthSq()<1e-8)dir.set(1,1,1);
+  dir.normalize();
+
+  controls.target.copy(center);
+  camera.position.copy(center).add(dir.multiplyScalar(distance));
+  camera.near=Math.max(radius/1000,.00001);
+  camera.far=Math.max(distance*20,100);
+  camera.updateProjectionMatrix();
+  controls.update();
+  requestRender();
+}
+
+function frameWhole(){
+  if(!root)return;
+  frameObject(root,1.8);
+}
+
+function addEdges(m){
+  if(!m.geometry||m.userData.viewerEdge)return;
+  const e=new THREE.EdgesGeometry(m.geometry,35);
+  const line=new THREE.LineSegments(
+    e,
+    new THREE.LineBasicMaterial({
+      color:0x111111,transparent:true,opacity:.45,depthWrite:false
+    })
+  );
+  line.visible=edges;
+  line.userData.viewerEdge=true;
+  m.add(line);
+  m.userData.viewerEdge=line;
+}
+
+// Edge overlays roughly double draw calls, so they're generated lazily
+// (only when actually turned on) instead of for every mesh at load time.
+function buildEdgesIfNeeded(){
+  if(edgesBuilt)return;
+  edgesBuilt=true;
+  meshes.forEach(m=>addEdges(m));
+  requestRender();
+}
+
+function disposeObject(obj){
+  obj.traverse(o=>{
+    if(o.isMesh){
+      if(o.geometry)o.geometry.dispose();
+      if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());
+      else if(o.material)o.material.dispose();
+    }
+  });
+}
+
+function hideHint(){
+  const hint=$("hint");
+  if(hint)hint.classList.add("hidden");
+}
+function showHint(){
+  const hint=$("hint");
+  if(hint)hint.classList.remove("hidden");
+}
+
+function clearSceneModel(){
+  if(root){
+    scene.remove(root);
+    disposeObject(root);
+  }
+  root=null;
+  meshes=[];
+  originals=[];
+  originalMaterials.clear();
+  selectedIndex=-1;
+  edgesBuilt=false;
+  shadowGround.visible=false;
+  $("parts").innerHTML="";
+  $("count").textContent="—";
+  showHint();
+  requestRender();
+}
+
+function build(){
+  meshes=[];
+  originalMaterials.clear();
+
+  root.updateMatrixWorld(true);
+
+  root.traverse(o=>{
+    if(o.isMesh)meshes.push(o);
+  });
+
+  originals=meshes.map(m=>({
+    position:m.position.clone(),
+    quaternion:m.quaternion.clone(),
+    scale:m.scale.clone(),
+    center:getBox(m).getCenter(new THREE.Vector3())
+  }));
+
+  meshes.forEach((m,i)=>{
+    originalMaterials.set(m,m.material);
+    m.castShadow=true;
+    m.receiveShadow=true;
+  });
+
+  if(edges)buildEdgesIfNeeded();
+
+  $("count").textContent=meshes.length;
+  requestRender();
+
+  $("parts").innerHTML="";
+  meshes.forEach((m,i)=>{
+    const d=document.createElement("div");
+    d.className="part";
+    d.dataset.index=i;
+    d.textContent=(i+1)+". "+(m.name||"Component "+(i+1));
+    d.title=m.name||"Component "+(i+1);
+    d.onclick=()=>selectComponent(i,true);
+    $("parts").appendChild(d);
+  });
+}
+
+function restoreAllMaterials(){
+  meshes.forEach(m=>{
+    const original=originalMaterials.get(m);
+    if(original)m.material=original;
+  });
+}
+
+function setIsolation(index){
+  meshes.forEach((m,i)=>{
+    const original=originalMaterials.get(m);
+    if(!original)return;
+
+    if(i===index){
+      const highlight=Array.isArray(original)
+        ? original.map(x=>x.clone())
+        : original.clone();
+
+      const apply=mat=>{
+        mat.transparent=false;
+        mat.opacity=1;
+        mat.depthWrite=true;
+        if("emissive" in mat){
+          mat.emissive=new THREE.Color(0x234e78);
+          mat.emissiveIntensity=.65;
+        }
+      };
+
+      if(Array.isArray(highlight))highlight.forEach(apply);
+      else apply(highlight);
+
+      m.material=highlight;
+    }else{
+      const ghost=Array.isArray(original)
+        ? original.map(x=>x.clone())
+        : original.clone();
+
+      const apply=mat=>{
+        mat.transparent=true;
+        mat.opacity=.08;
+        mat.depthWrite=false;
+      };
+
+      if(Array.isArray(ghost))ghost.forEach(apply);
+      else apply(ghost);
+
+      m.material=ghost;
+    }
+  });
+  requestRender();
+}
+
+function updateList(index){
+  document.querySelectorAll(".part").forEach((el,i)=>{
+    el.classList.toggle("active",i===index);
+  });
+
+  const row=document.querySelector(`.part[data-index="${index}"]`);
+  if(row)row.scrollIntoView({block:"nearest"});
+}
+
+function selectComponent(index,zoom=true){
+  if(index<0||index>=meshes.length)return;
+
+  selectedIndex=index;
+  updateList(index);
+  setIsolation(index);
+
+  const m=meshes[index];
+  $("status").innerHTML=
+    "<b>Selected:</b><br>"+
+    (m.name||"Component")+"<br>"+
+    "Other components are transparent.";
+
+  if(zoom)frameObject(m,3);
+}
+
+function clearSelection(){
+  selectedIndex=-1;
+  restoreAllMaterials();
+  document.querySelectorAll(".part").forEach(x=>x.classList.remove("active"));
+
+  $("status").innerHTML=
+    "<b>Full model.</b><br>"+
+    meshes.length+" components visible.";
+  requestRender();
+}
+
+function explode(v){
+  $("pct").textContent=Math.round(v)+"%";
+  if(!meshes.length)return;
+
+  const t=v/100;
+  const box=new THREE.Box3();
+
+  originals.forEach(o=>box.expandByPoint(o.center));
+  const center=box.getCenter(new THREE.Vector3());
+
+  meshes.forEach((m,i)=>{
+    const o=originals[i];
+    const dir=o.center.clone().sub(center);
+
+    if(dir.lengthSq()<1e-10)dir.set(0,1,0);
+    dir.normalize();
+
+    m.position.copy(o.position).add(dir.multiplyScalar(modelSize*.9*t));
+    m.quaternion.copy(o.quaternion);
+    m.scale.copy(o.scale);
+  });
+  requestRender();
+}
+
+function pickFromModel(event){
+  if(!meshes.length)return;
+
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+
+  raycaster.setFromCamera(mouse,camera);
+
+  const hits=raycaster.intersectObjects(meshes,false);
+  if(!hits.length)return;
+
+  const index=meshes.indexOf(hits[0].object);
+  if(index!==-1)selectComponent(index,true);
+}
+
+renderer.domElement.addEventListener("click",pickFromModel);
+
+function BuildStepMesh(geometryMesh,showEdges){
+  const geometry=new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+      geometryMesh.attributes.position.array,3
+    )
+  );
+
+  if(geometryMesh.attributes.normal){
+    geometry.setAttribute(
+      "normal",
+      new THREE.Float32BufferAttribute(
+        geometryMesh.attributes.normal.array,3
+      )
+    );
+  }
+
+  const index=Uint32Array.from(geometryMesh.index.array);
+  geometry.setIndex(new THREE.BufferAttribute(index,1));
+  geometry.computeBoundingSphere();
+
+  const baseColor=geometryMesh.color
+    ? new THREE.Color(
+        geometryMesh.color[0],
+        geometryMesh.color[1],
+        geometryMesh.color[2]
+      )
+    : new THREE.Color(0xc7cbd0);
+
+  let materials=[
+    new THREE.MeshStandardMaterial({
+      color:baseColor,
+      metalness:.55,
+      roughness:.45,
+      side:THREE.DoubleSide
+    })
+  ];
+
+  if(geometryMesh.brep_faces && geometryMesh.brep_faces.length){
+    for(const face of geometryMesh.brep_faces){
+      const color=face.color
+        ? new THREE.Color(face.color[0],face.color[1],face.color[2])
+        : baseColor;
+
+      materials.push(new THREE.MeshStandardMaterial({
+        color,
+        metalness:.55,
+        roughness:.45,
+        side:THREE.DoubleSide
+      }));
+    }
+
+    const triangleCount=geometryMesh.index.array.length/3;
+    let triangleIndex=0;
+    let faceIndex=0;
+
+    while(triangleIndex<triangleCount){
+      let lastIndex;
+      let materialIndex;
+
+      if(faceIndex>=geometryMesh.brep_faces.length){
+        lastIndex=triangleCount;
+        materialIndex=0;
+      }else if(triangleIndex<geometryMesh.brep_faces[faceIndex].first){
+        lastIndex=geometryMesh.brep_faces[faceIndex].first;
+        materialIndex=0;
+      }else{
+        lastIndex=geometryMesh.brep_faces[faceIndex].last+1;
+        materialIndex=faceIndex+1;
+        faceIndex++;
+      }
+
+      geometry.addGroup(
+        triangleIndex*3,
+        (lastIndex-triangleIndex)*3,
+        materialIndex
+      );
+
+      triangleIndex=lastIndex;
+    }
+  }
+
+  const mesh=new THREE.Mesh(
+    geometry,
+    materials.length>1?materials:materials[0]
+  );
+
+  mesh.name=geometryMesh.name||"Component";
+  return mesh;
+}
+
+/* Building the THREE.js scene from OCCT's output is the one phase of STEP
+   loading where we CAN show real, accurate progress (unlike the OpenCascade
+   parse call itself, which is a single opaque blocking WASM call with no
+   progress hook). Group containers are built first (fast), then the actual
+   mesh geometry is built in small batches with a yield to the browser
+   between each batch — without that yield, the percentage would update in
+   the DOM but the browser would never actually repaint it, since painting
+   only happens between JS tasks, not during one long synchronous call. */
+async function buildStepNodeAsync(rootNode,result,onProgress){
+  const tasks=[];
+
+  function buildSkeleton(node){
+    const group=new THREE.Group();
+    group.name=node.name||"Assembly";
+
+    if(node.meshes){
+      for(const meshIndex of node.meshes){
+        const gm=result.meshes[meshIndex];
+        if(gm)tasks.push({gm,group});
+      }
+    }
+    if(node.children){
+      for(const child of node.children){
+        group.add(buildSkeleton(child));
+      }
+    }
+    return group;
+  }
+
+  const rootGroup=buildSkeleton(rootNode);
+  const total=tasks.length;
+  const BATCH_SIZE=25;
+  let done=0;
+
+  for(let i=0;i<total;i+=BATCH_SIZE){
+    const batchEnd=Math.min(i+BATCH_SIZE,total);
+    for(let j=i;j<batchEnd;j++){
+      const {gm,group}=tasks[j];
+      group.add(BuildStepMesh(gm,false));
+    }
+    done=batchEnd;
+    if(onProgress)onProgress(done,total);
+    await new Promise(r=>requestAnimationFrame(r)); // let the browser actually paint the update
+  }
+
+  return rootGroup;
+}
+
+/* Animated loading overlay: circular progress ring shown while a file
+   is being read/parsed, with an indeterminate spin for phases that
+   have no measurable byte progress (WASM init, geometry parsing). */
+const loadOverlay=$("loadOverlay");
+const loadRing=$("loadRing");
+const loadRingFill=loadRing?loadRing.querySelector(".ring-fill"):null;
+const loadPctText=$("loadPctText");
+const loadLabel=$("loadLabel");
+const loadFileNameText=$("loadFileNameText");
+const RING_CIRC=2*Math.PI*28;
+
+function showLoading(fileLabel){
+  if(!loadOverlay)return;
+  if(loadFileNameText)loadFileNameText.textContent=fileLabel||"";
+  setLoadingProgress(0,"Reading file…");
+  loadOverlay.classList.add("active");
+}
+
+function setLoadingProgress(pct,label){
+  if(!loadOverlay)return;
+  if(label && loadLabel)loadLabel.textContent=label;
+
+  if(pct==null){
+    if(loadRing)loadRing.classList.add("indeterminate");
+    return;
+  }
+
+  if(loadRing)loadRing.classList.remove("indeterminate");
+  const clamped=Math.max(0,Math.min(100,pct));
+  if(loadRingFill)loadRingFill.style.strokeDashoffset=(RING_CIRC*(1-clamped/100)).toFixed(2);
+  if(loadPctText)loadPctText.textContent=Math.round(clamped)+"%";
+}
+
+function hideLoading(){
+  if(!loadOverlay)return;
+  loadOverlay.classList.remove("active");
+  if(loadRing)loadRing.classList.remove("indeterminate");
+}
+
+function readFileWithProgress(file,label){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onprogress=e=>{
+      if(e.total)setLoadingProgress(e.loaded/e.total*100,label);
+    };
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error||new Error("Could not read the file from disk."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function loadStep(file){
+  showLoading(file.name);
+  setLoadingProgress(0,"Reading STEP…");
+  $("status").innerHTML="<b>Reading STEP…</b><br>Starting OpenCascade WebAssembly.";
+
+  const arrayBuffer=await readFileWithProgress(file,"Reading STEP…");
+
+  setLoadingProgress(null,"Starting OpenCascade…");
+  await new Promise(r=>setTimeout(r,30));
+
+  if(!window.occtimportjs){
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement("script");
+      script.src=OCCT_SCRIPT;
+      script.onload=resolve;
+      script.onerror=()=>reject(
+        new Error("Could not load the free OpenCascade STEP importer.")
+      );
+      document.head.appendChild(script);
+    });
+  }
+
+  setLoadingProgress(null,"Processing STEP…");
+  $("status").innerHTML="<b>Processing STEP…</b><br>This happens locally in your browser.";
+
+  const occt=await window.occtimportjs();
+  const buffer=new Uint8Array(arrayBuffer);
+
+  const result=occt.ReadStepFile(buffer,{
+    linearUnit:"millimeter",
+    linearDeflectionType:"bounding_box_ratio",
+    linearDeflection:0.008,   // lighter tessellation: substantially fewer triangles
+    angularDeflection:0.65
+  });
+
+  if(!result || !result.success){
+    throw new Error("OpenCascade could not read this STEP file.");
+  }
+
+  setLoadingProgress(null,"Building scene…");
+
+  root=await buildStepNodeAsync(result.root,result,(done,total)=>{
+    setLoadingProgress(done/total*100,"Building scene… ("+done+"/"+total+")");
+  });
+  scene.add(root);
+
+  currentFileType="step";
+  build();
+
+  const box=getBox(root);
+  const size=box.getSize(new THREE.Vector3());
+  modelSize=Math.max(...size.toArray())||1;
+
+  const shadowTune=autoTuneShadowsForModel();
+  updateShadowRig();
+  frameWhole();
+  explode(0);
+
+  hideLoading();
+  hideHint();
+
+  $("status").innerHTML=
+    "<b>STEP loaded.</b><br>"+
+    meshes.length+" geometry components found.<br>"+
+    "Click a component to isolate it."+
+    (shadowTune.heavy?"<br>Shadows auto-disabled for this heavy assembly ("+shadowTune.triCount.toLocaleString()+" triangles) — re-enable from Display.":"");
+}
+
+/* GLTFLoader picks its texture loader once, synchronously, at the top of
+   parse(): ImageBitmapLoader (fetch()-based, used whenever createImageBitmap
+   exists) or the plain TextureLoader (new Image(); image.src = url — no
+   fetch() at all, including for the internal blob: URLs GLTFLoader creates
+   for embedded/bufferView-based images). Some sandboxed/preview environments
+   intercept fetch() itself, breaking texture loads. Temporarily hiding
+   createImageBitmap forces the fetch()-free path; it's restored right after
+   the synchronous parse() call returns, since the choice is locked in at
+   that point regardless of when textures finish loading afterward. This
+   alone fixes texture loading without needing to rebuild the GLB in memory
+   (which was tried first but doubled/tripled memory use and broke loading
+   large files). */
+function parseGLTFAvoidingFetch(loader,data,path,onLoad,onError){
+  const hadCIB="createImageBitmap" in window;
+  const original=window.createImageBitmap;
+  if(hadCIB)window.createImageBitmap=undefined;
+  try{
+    loader.parse(data,path,onLoad,onError);
+  }finally{
+    if(hadCIB)window.createImageBitmap=original;
+  }
+}
+
+// Shared Draco decoder for importing Draco-compressed GLBs (including ones
+// exported by this viewer's own "Compress with Draco" option). Points at
+// the same three.js-bundled decoder files already used elsewhere.
+const dracoLoader=new DRACOLoader();
+dracoLoader.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/libs/draco/");
+
+function loadGLB(file){
+  showLoading(file.name);
+  setLoadingProgress(0,"Reading GLB…");
+  $("status").innerHTML="<b>Loading GLB…</b>";
+
+  const loader=new GLTFLoader();
+  loader.setDRACOLoader(dracoLoader);
+  const reader=new FileReader();
+
+  reader.onload=()=>{
+    setLoadingProgress(null,"Parsing GLB…");
+
+    parseGLTFAvoidingFetch(loader,reader.result,"",g=>{
+      root=g.scene;
+      scene.add(root);
+      currentFileType="glb";
+
+      build();
+
+      const box=getBox(root);
+      const size=box.getSize(new THREE.Vector3());
+      modelSize=Math.max(...size.toArray())||1;
+
+      const shadowTune=autoTuneShadowsForModel();
+      updateShadowRig();
+      frameWhole();
+      explode(0);
+
+      hideLoading();
+      hideHint();
+
+      $("status").innerHTML=
+        "<b>GLB loaded.</b><br>"+
+        meshes.length+" mesh components.<br>"+
+        "Click a component to isolate it."+
+        (shadowTune.heavy?"<br>Shadows auto-disabled for this heavy model ("+shadowTune.triCount.toLocaleString()+" triangles) — re-enable from Display.":"");
+    },err=>{
+      hideLoading();
+      console.error(err);
+      $("status").innerHTML=
+        "<b>GLB load failed.</b><br>"+
+        (err.message||"Unknown error");
+    });
+  };
+
+  reader.onerror=()=>{
+    hideLoading();
+    console.error(reader.error);
+    $("status").innerHTML=
+      "<b>GLB load failed.</b><br>"+
+      "Could not read the file from disk.";
+  };
+
+  reader.onprogress=e=>{
+    if(e.total){
+      setLoadingProgress(e.loaded/e.total*100,"Reading GLB…");
+      $("status").innerHTML=
+        "<b>Loading GLB…</b><br>"+
+        Math.round(e.loaded/e.total*100)+"%";
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+function loadSTL(file){
+  showLoading(file.name);
+  setLoadingProgress(0,"Reading STL…");
+  $("status").innerHTML="<b>Loading STL…</b>";
+
+  const loader=new STLLoader();
+  const reader=new FileReader();
+
+  reader.onload=()=>{
+    setLoadingProgress(null,"Parsing STL…");
+
+    let geometry;
+    try{
+      geometry=loader.parse(reader.result);
+    }catch(err){
+      hideLoading();
+      console.error(err);
+      $("status").innerHTML=
+        "<b>STL load failed.</b><br>"+
+        (err.message||"Unknown error");
+      return;
+    }
+
+    if(!geometry.attributes.normal)geometry.computeVertexNormals();
+
+    const material=new THREE.MeshStandardMaterial({
+      color:0x9fb3c8,metalness:.55,roughness:.45
+    });
+    const mesh=new THREE.Mesh(geometry,material);
+    mesh.name=file.name.replace(/\.stl$/i,"");
+
+    root=new THREE.Group();
+    root.name=mesh.name;
+    root.add(mesh);
+    scene.add(root);
+    currentFileType="stl";
+
+    build();
+
+    const box=getBox(root);
+    const size=box.getSize(new THREE.Vector3());
+    modelSize=Math.max(...size.toArray())||1;
+
+    const shadowTune=autoTuneShadowsForModel();
+    updateShadowRig();
+    frameWhole();
+    explode(0);
+
+    hideLoading();
+    hideHint();
+
+    $("status").innerHTML=
+      "<b>STL loaded.</b><br>"+
+      meshes.length+" mesh component"+(meshes.length===1?"":"s")+".<br>"+
+      "Click a component to isolate it."+
+      (shadowTune.heavy?"<br>Shadows auto-disabled for this heavy model ("+shadowTune.triCount.toLocaleString()+" triangles) — re-enable from Display.":"");
+  };
+
+  reader.onerror=()=>{
+    hideLoading();
+    console.error(reader.error);
+    $("status").innerHTML=
+      "<b>STL load failed.</b><br>"+
+      "Could not read the file from disk.";
+  };
+
+  reader.onprogress=e=>{
+    if(e.total){
+      setLoadingProgress(e.loaded/e.total*100,"Reading STL…");
+      $("status").innerHTML=
+        "<b>Loading STL…</b><br>"+
+        Math.round(e.loaded/e.total*100)+"%";
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+async function loadIges(file){
+  showLoading(file.name);
+  setLoadingProgress(0,"Reading IGES…");
+  $("status").innerHTML="<b>Reading IGES…</b><br>Starting OpenCascade WebAssembly.";
+
+  const arrayBuffer=await readFileWithProgress(file,"Reading IGES…");
+
+  setLoadingProgress(null,"Starting OpenCascade…");
+  await new Promise(r=>setTimeout(r,30));
+
+  if(!window.occtimportjs){
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement("script");
+      script.src=OCCT_SCRIPT;
+      script.onload=resolve;
+      script.onerror=()=>reject(
+        new Error("Could not load the free OpenCascade IGES importer.")
+      );
+      document.head.appendChild(script);
+    });
+  }
+
+  setLoadingProgress(null,"Processing IGES…");
+  $("status").innerHTML="<b>Processing IGES…</b><br>This happens locally in your browser.";
+
+  const occt=await window.occtimportjs();
+  const buffer=new Uint8Array(arrayBuffer);
+
+  const result=occt.ReadIgesFile(buffer,{
+    linearUnit:"millimeter",
+    linearDeflectionType:"bounding_box_ratio",
+    linearDeflection:0.008,
+    angularDeflection:0.65
+  });
+
+  if(!result || !result.success){
+    throw new Error("OpenCascade could not read this IGES file.");
+  }
+
+  setLoadingProgress(null,"Building scene…");
+
+  root=await buildStepNodeAsync(result.root,result,(done,total)=>{
+    setLoadingProgress(done/total*100,"Building scene… ("+done+"/"+total+")");
+  });
+  scene.add(root);
+
+  currentFileType="iges";
+  build();
+
+  const box=getBox(root);
+  const size=box.getSize(new THREE.Vector3());
+  modelSize=Math.max(...size.toArray())||1;
+
+  const shadowTune=autoTuneShadowsForModel();
+  updateShadowRig();
+  frameWhole();
+  explode(0);
+
+  hideLoading();
+  hideHint();
+
+  $("status").innerHTML=
+    "<b>IGES loaded.</b><br>"+
+    meshes.length+" geometry components found.<br>"+
+    "Click a component to isolate it."+
+    (shadowTune.heavy?"<br>Shadows auto-disabled for this heavy assembly ("+shadowTune.triCount.toLocaleString()+" triangles) — re-enable from Display.":"");
+}
+
+async function loadBrep(file){
+  showLoading(file.name);
+  setLoadingProgress(0,"Reading BREP…");
+  $("status").innerHTML="<b>Reading BREP…</b><br>Starting OpenCascade WebAssembly.";
+
+  const arrayBuffer=await readFileWithProgress(file,"Reading BREP…");
+
+  setLoadingProgress(null,"Starting OpenCascade…");
+  await new Promise(r=>setTimeout(r,30));
+
+  if(!window.occtimportjs){
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement("script");
+      script.src=OCCT_SCRIPT;
+      script.onload=resolve;
+      script.onerror=()=>reject(
+        new Error("Could not load the free OpenCascade BREP importer.")
+      );
+      document.head.appendChild(script);
+    });
+  }
+
+  setLoadingProgress(null,"Processing BREP…");
+  $("status").innerHTML="<b>Processing BREP…</b><br>This happens locally in your browser.";
+
+  const occt=await window.occtimportjs();
+  const buffer=new Uint8Array(arrayBuffer);
+
+  // linearUnit has no effect on BREP (it carries no unit info of its own),
+  // but the tessellation-quality options still apply.
+  const result=occt.ReadBrepFile(buffer,{
+    linearDeflectionType:"bounding_box_ratio",
+    linearDeflection:0.008,
+    angularDeflection:0.65
+  });
+
+  if(!result || !result.success){
+    throw new Error("OpenCascade could not read this BREP file.");
+  }
+
+  setLoadingProgress(null,"Building scene…");
+
+  root=await buildStepNodeAsync(result.root,result,(done,total)=>{
+    setLoadingProgress(done/total*100,"Building scene… ("+done+"/"+total+")");
+  });
+  scene.add(root);
+
+  currentFileType="brep";
+  build();
+
+  const box=getBox(root);
+  const size=box.getSize(new THREE.Vector3());
+  modelSize=Math.max(...size.toArray())||1;
+
+  const shadowTune=autoTuneShadowsForModel();
+  updateShadowRig();
+  frameWhole();
+  explode(0);
+
+  hideLoading();
+  hideHint();
+
+  $("status").innerHTML=
+    "<b>BREP loaded.</b><br>"+
+    meshes.length+" geometry components found.<br>"+
+    "Click a component to isolate it."+
+    (shadowTune.heavy?"<br>Shadows auto-disabled for this heavy assembly ("+shadowTune.triCount.toLocaleString()+" triangles) — re-enable from Display.":"");
+}
+
+async function openFile(file){
+  if(!file)return;
+
+  const name=file.name;
+  const ext=name.split(".").pop().toLowerCase();
+
+  $("fileName").textContent=name;
+  clearSceneModel();
+  $("slider").value=0;
+  $("pct").textContent="0%";
+
+  if(["glb","gltf"].includes(ext)){
+    loadGLB(file);
+    return;
+  }
+
+  if(ext==="stl"){
+    loadSTL(file);
+    return;
+  }
+
+  if(["step","stp"].includes(ext)){
+    try{
+      await loadStep(file);
+    }catch(err){
+      hideLoading();
+      console.error(err);
+      $("status").innerHTML=
+        "<b>STEP load failed.</b><br>"+
+        (err.message||err);
+    }
+    return;
+  }
+
+  if(["iges","igs"].includes(ext)){
+    try{
+      await loadIges(file);
+    }catch(err){
+      hideLoading();
+      console.error(err);
+      $("status").innerHTML=
+        "<b>IGES load failed.</b><br>"+
+        (err.message||err);
+    }
+    return;
+  }
+
+  if(["brep","brp"].includes(ext)){
+    try{
+      await loadBrep(file);
+    }catch(err){
+      hideLoading();
+      console.error(err);
+      $("status").innerHTML=
+        "<b>BREP load failed.</b><br>"+
+        (err.message||err);
+    }
+    return;
+  }
+
+  if(["x_t","x_b","sldprt","sldasm","slddrw"].includes(ext)){
+    $("status").innerHTML=
+      "<b>Format not yet supported.</b><br>"+
+      "."+ext+
+      " requires a native CAD kernel/converter. "+
+      "This free GitHub-only build does not send your files to a third-party server.";
+    return;
+  }
+
+  $("status").innerHTML=
+    "<b>Unsupported format.</b><br>"+
+    "Currently supported: GLB, GLTF, STL, STEP, STP, IGES, IGS, BREP and BRP.";
+}
+
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+/* Draco compression on export.
+   three.js's own GLTFExporter cannot write KHR_draco_mesh_compression, so
+   compressed export runs the plain-exported GLB through glTF-Transform
+   (loaded lazily from a CDN, only when the user actually asks to compress)
+   with the same Draco encoder three.js ships for its examples. */
+const DRACO_ENCODER_SCRIPT=
+  "https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/libs/draco/draco_encoder.js";
+
+let dracoPipelinePromise=null;
+
+function loadDracoPipeline(){
+  if(dracoPipelinePromise)return dracoPipelinePromise;
+
+  dracoPipelinePromise=(async()=>{
+    if(!window.DracoEncoderModule){
+      await new Promise((resolve,reject)=>{
+        const s=document.createElement("script");
+        s.src=DRACO_ENCODER_SCRIPT;
+        s.onload=resolve;
+        s.onerror=()=>reject(new Error("Could not load the Draco encoder."));
+        document.head.appendChild(s);
+      });
+    }
+
+    const [core,extensions,functions]=await Promise.all([
+      import("https://cdn.jsdelivr.net/npm/@gltf-transform/core@4/+esm"),
+      import("https://cdn.jsdelivr.net/npm/@gltf-transform/extensions@4/+esm"),
+      import("https://cdn.jsdelivr.net/npm/@gltf-transform/functions@4/+esm")
+    ]);
+
+    const encoderModule=await new window.DracoEncoderModule();
+
+    const io=new core.WebIO()
+      .registerExtensions([extensions.KHRDracoMeshCompression])
+      .registerDependencies({"draco3d.encoder":encoderModule});
+
+    return {io,draco:functions.draco};
+  })();
+
+  dracoPipelinePromise.catch(()=>{dracoPipelinePromise=null;}); // allow retrying after a failure
+
+  return dracoPipelinePromise;
+}
+
+function exportModel(binary,compress){
+  if(!root){
+    $("status").innerHTML="<b>Nothing to export.</b><br>Load a model first.";
+    return;
+  }
+
+  const rawName=($("fileName").textContent||"model").trim();
+  const baseName=(rawName==="No file loaded"?"model":rawName).replace(/\.[^.]+$/,"")||"model";
+
+  const exporter=new GLTFExporter();
+
+  if(compress){
+    $("status").innerHTML="<b>Preparing Draco compression…</b><br>Downloading the encoder (first use only).";
+
+    exporter.parse(root,async glb=>{
+      try{
+        const {io,draco:dracoFn}=await loadDracoPipeline();
+
+        $("status").innerHTML="<b>Compressing with Draco…</b><br>This can take a moment for large models.";
+
+        const gltfDoc=await io.readBinary(new Uint8Array(glb));
+        await gltfDoc.transform(dracoFn({method:"edgebreaker"}));
+        const compressed=await io.writeBinary(gltfDoc);
+
+        downloadBlob(new Blob([compressed],{type:"model/gltf-binary"}),baseName+"-draco.glb");
+
+        const before=(glb.byteLength/1024).toFixed(0);
+        const after=(compressed.byteLength/1024).toFixed(0);
+        $("status").innerHTML=
+          "<b>Compressed export complete.</b><br>"+
+          baseName+"-draco.glb downloaded.<br>"+
+          before+" KB → "+after+" KB.";
+      }catch(err){
+        console.error(err);
+        $("status").innerHTML=
+          "<b>Draco compression failed.</b><br>"+
+          (err.message||"Unknown error")+
+          "<br>Try exporting without compression instead.";
+      }
+    },err=>{
+      console.error(err);
+      $("status").innerHTML="<b>Export failed.</b><br>"+(err.message||err);
+    },{binary:true});
+    return;
+  }
+
+  exporter.parse(
+    root,
+    result=>{
+      if(binary){
+        downloadBlob(new Blob([result],{type:"model/gltf-binary"}),baseName+".glb");
+      }else{
+        downloadBlob(new Blob([JSON.stringify(result,null,2)],{type:"model/gltf+json"}),baseName+".gltf");
+      }
+      $("status").innerHTML="<b>Export complete.</b><br>"+baseName+(binary?".glb":".gltf")+" downloaded.";
+    },
+    err=>{
+      console.error(err);
+      $("status").innerHTML="<b>Export failed.</b><br>"+(err.message||err);
+    },
+    {binary:!!binary}
+  );
+}
+window.__cadExportModel=exportModel;
+
+function exportModelAsSTL(){
+  if(!root){
+    $("status").innerHTML="<b>Nothing to export.</b><br>Load a model first.";
+    return;
+  }
+
+  const rawName=($("fileName").textContent||"model").trim();
+  const baseName=(rawName==="No file loaded"?"model":rawName).replace(/\.[^.]+$/,"")||"model";
+
+  try{
+    // STL carries no material/color data — geometry only, which is exactly
+    // what's needed for 3D printing or re-import elsewhere.
+    const data=new STLExporter().parse(root,{binary:true});
+    downloadBlob(new Blob([data],{type:"model/stl"}),baseName+".stl");
+    $("status").innerHTML="<b>Export complete.</b><br>"+baseName+".stl downloaded.";
+  }catch(err){
+    console.error(err);
+    $("status").innerHTML="<b>Export failed.</b><br>"+(err.message||err);
+  }
+}
+window.__cadExportModelSTL=exportModelAsSTL;
+
+function captureScreenshot(){
+  if(!root){
+    $("status").innerHTML="<b>Nothing to capture.</b><br>Load a model first.";
+    return;
+  }
+
+  composer.render(); // render the freshest frame (with AO) immediately before capture
+
+  renderer.domElement.toBlob(blob=>{
+    if(!blob){
+      $("status").innerHTML="<b>Screenshot failed.</b><br>Could not capture the canvas.";
+      return;
+    }
+    const rawName=($("fileName").textContent||"model").trim();
+    const baseName=(rawName==="No file loaded"?"model":rawName).replace(/\.[^.]+$/,"")||"model";
+    downloadBlob(blob,baseName+"-view.png");
+    $("status").innerHTML="<b>Screenshot saved.</b><br>"+baseName+"-view.png downloaded.";
+  },"image/png");
+}
+window.__cadCaptureScreenshot=captureScreenshot;
+
+$("open").onclick=()=>$("fileInput").click();
+
+$("fileInput").addEventListener("change",e=>{
+  if(e.target.files[0])openFile(e.target.files[0]);
+  e.target.value="";
+});
+
+$("slider").oninput=e=>explode(+e.target.value);
+
+$("reset").onclick=()=>{
+  $("slider").value=0;
+  explode(0);
+  clearSelection();
+  frameWhole();
+};
+
+$("fit").onclick=()=>frameWhole();
+
+$("play").onclick=()=>playing=!playing;
+
+$("edges").onclick=()=>{
+  edges=!edges;
+  window.__edgesOn=edges;
+
+  if(edges)buildEdgesIfNeeded();
+
+  meshes.forEach(m=>{
+    if(m.userData.viewerEdge)m.userData.viewerEdge.visible=edges;
+  });
+  requestRender();
+};
+window.__edgesOn=edges;
+
+window.addEventListener("dragover",e=>{
+  e.preventDefault();
+  $("dropZone").style.display="flex";
+});
+
+window.addEventListener("dragleave",e=>{
+  if(e.clientX<=0||e.clientY<=0||
+     e.clientX>=innerWidth||e.clientY>=innerHeight){
+    $("dropZone").style.display="none";
+  }
+});
+
+window.addEventListener("drop",e=>{
+  e.preventDefault();
+  $("dropZone").style.display="none";
+
+  const file=e.dataTransfer.files[0];
+  if(file)openFile(file);
+});
+
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  composer.setSize(innerWidth,innerHeight);
+  requestRender();
+});
+
+let last=performance.now();
+
+function loop(now){
+  requestAnimationFrame(loop);
+
+  const dt=Math.min((now-last)/1000,.05);
+  last=now;
+
+  if(playing){
+    let v=+$("slider").value+dt*30;
+    if(v>=100){
+      v=100;
+      playing=false;
+    }
+    $("slider").value=v;
+    explode(v);
+  }
+
+  const changed=controls.update();
+
+  if(needsRender || changed || playing){
+    composer.render();
+    needsRender=false;
+  }
+}
+
+loop(performance.now());
+</script>
+
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  // ---- Explode control bar ----
+  const explodePanel = $("explodePanel");
+  const explodeRange = $("explodeRange");
+  const explodePctLabel = $("explodePctLabel");
+  const explodeAutoBtn = $("explodeAutoBtn");
+  const explodePanelClose = $("explodePanelClose");
+  const hiddenSlider = $("slider");
+  const hiddenPlay = $("play");
+
+  function pushExplode(val){
+    if (hiddenSlider) {
+      hiddenSlider.value = val;
+      hiddenSlider.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  if (explodeRange) {
+    explodeRange.addEventListener("input", function () {
+      pushExplode(+explodeRange.value);
+    });
+  }
+
+  if (explodeAutoBtn) {
+    explodeAutoBtn.onclick = function () {
+      if (hiddenPlay) hiddenPlay.click();
+    };
+  }
+
+  if (explodePanelClose) {
+    explodePanelClose.onclick = function () {
+      explodePanel.classList.remove("open");
+      const explodeCmdBtn = $("explodeCommand");
+      if (explodeCmdBtn) explodeCmdBtn.classList.remove("active");
+    };
+  }
+
+  // ---- Export control bar ----
+  const exportPanel = $("exportPanel");
+  const exportGlbBtn = $("exportGlbBtn");
+  const exportGltfBtn = $("exportGltfBtn");
+  const exportStlBtn = $("exportStlBtn");
+  const exportPngBtn = $("exportPngBtn");
+  const exportPanelClose = $("exportPanelClose");
+  const exportDracoToggle = $("exportDracoToggle");
+
+  function closeExportPanel(){
+    if (exportPanel) exportPanel.classList.remove("open");
+    const exportCmdBtn = $("exportCommand");
+    if (exportCmdBtn) exportCmdBtn.classList.remove("active");
+  }
+
+  function syncExportButtonLabels(){
+    const compress = !!(exportDracoToggle && exportDracoToggle.checked);
+    if (exportGlbBtn) {
+      exportGlbBtn.textContent = compress
+        ? "Export as .glb (Draco compressed)"
+        : "Export as .glb (binary — recommended)";
+    }
+    if (exportGltfBtn) {
+      exportGltfBtn.disabled = compress;
+      exportGltfBtn.title = compress
+        ? "Draco compression always produces a binary .glb"
+        : "";
+    }
+  }
+  syncExportButtonLabels();
+
+  if (exportDracoToggle) exportDracoToggle.addEventListener("change", syncExportButtonLabels);
+
+  if (exportGlbBtn) {
+    exportGlbBtn.onclick = function () {
+      const compress = !!(exportDracoToggle && exportDracoToggle.checked);
+      if (typeof window.__cadExportModel === "function") window.__cadExportModel(true, compress);
+      closeExportPanel();
+    };
+  }
+  if (exportGltfBtn) {
+    exportGltfBtn.onclick = function () {
+      if (exportGltfBtn.disabled) return;
+      if (typeof window.__cadExportModel === "function") window.__cadExportModel(false, false);
+      closeExportPanel();
+    };
+  }
+  if (exportStlBtn) {
+    exportStlBtn.onclick = function () {
+      if (typeof window.__cadExportModelSTL === "function") window.__cadExportModelSTL();
+      closeExportPanel();
+    };
+  }
+  if (exportPngBtn) {
+    exportPngBtn.onclick = function () {
+      if (typeof window.__cadCaptureScreenshot === "function") window.__cadCaptureScreenshot();
+      closeExportPanel();
+    };
+  }
+  if (exportPanelClose) exportPanelClose.onclick = closeExportPanel;
+
+  // Keep the panel's range/label/play-state in sync with the actual explode
+  // amount regardless of what changed it (drag, auto-play, or Home/reset).
+  (function syncExplodeUI(){
+    if (explodePanel && explodePanel.classList.contains("open") && hiddenSlider) {
+      const v = +hiddenSlider.value || 0;
+      if (explodeRange && document.activeElement !== explodeRange) explodeRange.value = v;
+      if (explodePctLabel) explodePctLabel.textContent = Math.round(v) + "%";
+      if (explodeAutoBtn) {
+        const isPlaying = typeof window.__cadIsPlaying === "function" && window.__cadIsPlaying();
+        explodeAutoBtn.classList.toggle("playing", !!isPlaying);
+        explodeAutoBtn.textContent = isPlaying ? "❚❚" : "▶";
+      }
+    }
+    requestAnimationFrame(syncExplodeUI);
+  })();
+
+  // Open uses the original file input.
+  const openCommand = $("openCommand");
+  if (openCommand) {
+    openCommand.onclick = function () {
+      const input = $("fileInput");
+      if (input) input.click();
+      else {
+        const originalOpen = $("open");
+        if (originalOpen) originalOpen.click();
+      }
+    };
+  }
+
+  // These call the original viewer controls, not duplicate implementations.
+  const home = $("homeCommand");
+  if (home) home.onclick = function () {
+    const b = $("reset");
+    if (b) b.click();
+  };
+
+  const fit = $("fitCommand");
+  if (fit) fit.onclick = function () {
+    const b = $("fit");
+    if (b) b.click();
+  };
+
+  const explode = $("explodeCommand");
+  if (explode) explode.onclick = function () {
+    const opening = !explodePanel.classList.contains("open");
+    explodePanel.classList.toggle("open", opening);
+    explode.classList.toggle("active", opening);
+  };
+
+  const exportCommand = $("exportCommand");
+  if (exportCommand) exportCommand.onclick = function () {
+    const opening = !exportPanel.classList.contains("open");
+    exportPanel.classList.toggle("open", opening);
+    exportCommand.classList.toggle("active", opening);
+  };
+
+  // ---- Display panel: Edges / Shadows toggles ----
+  const displayPanel = $("displayPanel");
+  const displayPanelClose = $("displayPanelClose");
+  const displayCommand = $("displayCommand");
+  const edgesToggle = $("edgesToggle");
+  const shadowsToggle = $("shadowsToggle");
+  const hiddenEdgesBtn = $("edges");
+
+  function syncDisplayToggles(){
+    if (edgesToggle) edgesToggle.checked = !!window.__edgesOn;
+    if (shadowsToggle) {
+      shadowsToggle.checked = typeof window.__cadShadowsOn === "function" && window.__cadShadowsOn();
+    }
+  }
+
+  if (displayCommand) {
+    displayCommand.onclick = function () {
+      const opening = !displayPanel.classList.contains("open");
+      if (opening) syncDisplayToggles();
+      displayPanel.classList.toggle("open", opening);
+      displayCommand.classList.toggle("active", opening);
+    };
+  }
+  if (displayPanelClose) {
+    displayPanelClose.onclick = function () {
+      displayPanel.classList.remove("open");
+      if (displayCommand) displayCommand.classList.remove("active");
+    };
+  }
+  if (edgesToggle && hiddenEdgesBtn) {
+    edgesToggle.addEventListener("change", function () {
+      hiddenEdgesBtn.click(); // toggles the module script's internal edges state
+    });
+  }
+  if (shadowsToggle) {
+    shadowsToggle.addEventListener("change", function () {
+      if (typeof window.__cadSetShadows === "function") {
+        window.__cadSetShadows(shadowsToggle.checked);
+      }
+    });
+  }
+
+  // Collapsible left panel.
+  const panel = $("panel");
+  const min = $("panelMinBtn");
+  if (panel && min) {
+    min.onclick = function () {
+      const collapsed = panel.classList.toggle("minimized");
+      min.textContent = collapsed ? "›" : "‹";
+      min.title = collapsed ? "Expand panel" : "Minimize panel";
+    };
+  }
+
+  // Component filter.
+  const filter = $("filter");
+  if (filter) {
+    filter.addEventListener("input", function () {
+      const q = filter.value.toLowerCase();
+      document.querySelectorAll("#parts .part").forEach(function (item) {
+        item.style.display = item.textContent.toLowerCase().includes(q) ? "" : "none";
+      });
+    });
+  }
+
+
+  // ---- Fusion-360-style view cube: click a face to snap, drag to orbit ----
+  const cubeEl = $("cube3d");
+
+  const FACE_DIRS = {
+    top:    [0, 1, 0],
+    bottom: [0,-1, 0],
+    front:  [0, 0, 1],
+    back:   [0, 0,-1],
+    left:   [-1,0, 0],
+    right:  [1, 0, 0]
+  };
+
+  function vlen(x,y,z){ return Math.sqrt(x*x+y*y+z*z) || 1; }
+
+  function setCubeView(type){
+    const c = window.__cadControls;
+    const dir = FACE_DIRS[type];
+    if (!c || !c.object || !c.target || !dir) return;
+
+    const target = c.target;
+    const distance = Math.max(c.object.position.distanceTo(target), 10);
+
+    c.object.position.set(
+      target.x + dir[0]*distance,
+      target.y + dir[1]*distance,
+      target.z + dir[2]*distance
+    );
+    c.object.up.set(0,1,0);
+    if (type === "top")    c.object.up.set(0,0,-1);
+    if (type === "bottom") c.object.up.set(0,0, 1);
+
+    c.object.lookAt(target.x, target.y, target.z);
+    c.update();
+
+    if (typeof window.__cadRequestRender === "function") window.__cadRequestRender();
+  }
+
+  // Tap-vs-drag is decided from raw pointer coordinates rather than the
+  // browser's synthesized "click" event: after setPointerCapture(), click
+  // dispatch on the original child element is inconsistent across browsers,
+  // which made face taps silently do nothing.
+  let cubeDragging = false, cubeMoved = false;
+  let cubeDownX = 0, cubeDownY = 0, cubeLastX = 0, cubeLastY = 0;
+  let cubeDownFace = null;
+
+  if (cubeEl) {
+    cubeEl.addEventListener("pointerdown", function (e) {
+      cubeDragging = true;
+      cubeMoved = false;
+      cubeDownX = cubeLastX = e.clientX;
+      cubeDownY = cubeLastY = e.clientY;
+      cubeDownFace = e.target.closest(".cf");
+      cubeEl.classList.add("dragging");
+      try { cubeEl.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    cubeEl.addEventListener("pointermove", function (e) {
+      if (!cubeDragging) return;
+      const dx = e.clientX - cubeLastX, dy = e.clientY - cubeLastY;
+      cubeLastX = e.clientX; cubeLastY = e.clientY;
+
+      if (Math.abs(e.clientX - cubeDownX) > 4 || Math.abs(e.clientY - cubeDownY) > 4) {
+        cubeMoved = true;
+      }
+
+      const c = window.__cadControls;
+      if (!c || !c.object || !c.target) return;
+
+      const px = c.object.position.x - c.target.x;
+      const py = c.object.position.y - c.target.y;
+      const pz = c.object.position.z - c.target.z;
+      const radius = vlen(px,py,pz);
+
+      let theta = Math.atan2(px, pz);
+      let phi = Math.acos(Math.max(-1, Math.min(1, py/radius)));
+
+      theta -= dx * 0.008;
+      phi   -= dy * 0.008;
+      phi = Math.max(0.06, Math.min(Math.PI - 0.06, phi));
+
+      const sinPhi = Math.sin(phi);
+      c.object.position.set(
+        c.target.x + radius*sinPhi*Math.sin(theta),
+        c.target.y + radius*Math.cos(phi),
+        c.target.z + radius*sinPhi*Math.cos(theta)
+      );
+      c.object.up.set(0,1,0);
+      c.object.lookAt(c.target.x, c.target.y, c.target.z);
+      c.update();
+
+      if (typeof window.__cadRequestRender === "function") window.__cadRequestRender();
+    });
+
+    function endCubeDrag(e){
+      if (cubeDragging && !cubeMoved && cubeDownFace) {
+        setCubeView(cubeDownFace.dataset.view);
+      }
+      cubeDragging = false;
+      cubeMoved = false;
+      cubeDownFace = null;
+      cubeEl.classList.remove("dragging");
+    }
+    cubeEl.addEventListener("pointerup", endCubeDrag);
+    cubeEl.addEventListener("pointercancel", endCubeDrag);
+  }
+
+  // Keep the cube's own rotation mirroring the live camera orientation,
+  // whether the camera moved via the cube, the canvas, or the view cube.
+  (function syncCubeOrientation(){
+    const c = window.__cadControls;
+    if (cubeEl && c && c.object && c.target) {
+      const dx = c.object.position.x - c.target.x;
+      const dy = c.object.position.y - c.target.y;
+      const dz = c.object.position.z - c.target.z;
+      const len = vlen(dx,dy,dz);
+
+      const theta = Math.atan2(dx, dz) * 180/Math.PI;
+      const phi = Math.acos(Math.max(-1, Math.min(1, dy/len))) * 180/Math.PI;
+
+      cubeEl.style.transform = "rotateX(" + (phi - 90) + "deg) rotateY(" + (-theta) + "deg)";
+    }
+    requestAnimationFrame(syncCubeOrientation);
+  })();
+
+  // Keep filename in the top bar synchronized with the original fileName element.
+  const fn = $("fileName");
+  const ft = $("fileTab");
+  if (fn && ft) {
+    const sync = function () {
+      ft.textContent = fn.textContent || "No file loaded";
+    };
+    sync();
+    new MutationObserver(sync).observe(fn, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
